@@ -34,4 +34,32 @@ The current food donation management system in Edmonton faces challenges in coor
 - Kendrick Moreno - Team Member
 - Roe Alincastre - Team Member
 - Catrina Llamas - Team Member
-- Professor Uchenna Mgbaja - Faculty Advisor.
+- Professor Uchenna Mgbaja - Faculty Advisor
+
+## Docker Information: How to Run the App
+
+To run the Edmonton Food Drive API using Docker, follow the instructions below:
+1. Prerequisites: Ensure you have Docker installed on your machine.
+
+2. Clone the Repository: If you haven't cloned the project yet, do so by running:
+```
+git clone https://github.com/kmoreno013/EFD2024.git
+cd EFD_2024
+```
+
+3. Build the Docker Container: In the root directory of the project (where the Dockerfile is located), run the following command to build the Docker Container:
+```
+docker compose up -d
+```
+
+4. Access the Application: Once the container is running, you can access the API through the following commands:
+* Home Endpoint: `GET http://127.0.0.1:6060/efd2024_home`
+* Health Status: `GET http://127.0.0.1:6060/health_status`
+* Prediction (Polynomial Regression): `POST http://127.0.0.1:6060/v1/predict -H "Content-Type: application/json" -d @configs/request.json`
+* Prediction (Decision Tree): `POST http://127.0.0.1:6060/v1/predict -H "Content-Type: application/json" -d @configs/request.json`
+
+5. Shutting Down the Container: When you're done testing, you can stop the container by running:
+```
+docker stop <container_id>
+docker ps
+```
