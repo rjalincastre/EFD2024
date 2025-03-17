@@ -4,6 +4,12 @@ import os
 import yaml
 from flask import Flask, jsonify, request
 from src.utils.open_config import get_default_params
+from src.utils.logging_config import configure_logging
+
+
+params = get_default_params()
+loggers = configure_logging()
+logger = loggers['api']
 
 app = Flask(__name__)
 
@@ -14,7 +20,7 @@ def load_model(model_path):
     try:
         with open(model_path, 'rb') as model_file:
             model = pickle.load(model_file)
-            print(f"Model loaded successfully from {model_path}")
+            logger.info(f"Model loaded successfully from {model_path}")
             return model
     except Exception as e:
         raise RuntimeError(f"Error loading the model: {e}")
@@ -37,9 +43,11 @@ def predict_donations(model, ward, time_spent, num_doors, num_routes, year, tota
     except Exception as e:
         raise RuntimeError(f"Error making predictions: {e}")
 
-params = get_default_params()
-poly_model = load_model(os.path.join(params.project_root, params.model_poly))
-dt_model = load_model(os.path.join(params.project_root, params.model_dt))
+try:
+    poly_model = load_model(os.path.join(params.project_root, params.model_poly))
+    dt_model = load_model(os.path.join(params.project_root, params.model_dt))
+except Exception as e:
+    logger.info(f"Error loading models: {e}")
 
 @app.route('/efd2024_home', methods=['GET'])
 def home():
@@ -155,4 +163,8 @@ def predict_v2():
 
 
 if __name__ == "__main__":
-    app.run(host='127.0.0.1', port=9000, debug=True)
+    app.run(host='127.0.0.1', port=6060, debug=True)
+
+
+
+
