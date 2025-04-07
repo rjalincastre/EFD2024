@@ -2,9 +2,15 @@ import pickle
 import pandas as pd
 import os
 import yaml
+import logging
+import time
+import threading
+import psutil
 from flask import Flask, jsonify, request
 from src.utils.open_config import get_default_params
 from src.utils.logging_config import configure_logging
+from prometheus_flask_exporter import PrometheusMetrics
+from prometheus_client import Counter, Histogram, Gauge
 
 
 params = get_default_params()
@@ -12,6 +18,13 @@ loggers = configure_logging()
 logger = loggers['api']
 
 app = Flask(__name__)
+
+metrics = PrometheusMetrics(app)
+
+prediction_requests = Counter('model_prediction_requests_total', 'Total number of prediction requests', ['model_version', 'status'])
+prediction_time = Histogram('model_prediction_duration_seconds', 'Time spent processing prediction', ['model_version'])
+memory_usage = Gauge('app_memory_usage_bytes', 'Memory usage of the application')
+cpu_usage = Gauge('app_cpu_usage_percent', 'CPU usage percentage of the application')
 
 def load_model(model_path):
     """Loads a trained machine learning model from a file."""
@@ -110,6 +123,9 @@ def health_check():
 def predict_v1():
     """Predict using the polynomial regression model."""
     data = request.get_json()
+    start_time = time.time()
+    model_version = "Polynomial Regression"  
+
     try:
         prediction = predict_donations(
             poly_model,
@@ -128,17 +144,24 @@ def predict_v1():
             "predicted number of donation bags": prediction
         }
 
+        duration = time.time() - start_time
+        prediction_time.labels(model_version=model_version).observe(duration)
+
         return jsonify(response)
     except Exception as e:
+        prediction_requests.labels(
+            model_version=model_version,
+            status="error"
+        ).inc()
+
         return jsonify({"error": str(e)}), 400
 
 @app.route('/v2/predict', methods=['POST'])
 def predict_v2():
     """Predict using the decision tree model."""
-    if not request.is_json:
-        return jsonify({"error": "Request must contain JSON format data"}), 400
-    
     data = request.get_json()
+    start_time = time.time()
+    model_version = "Decision Tree Model"  
     try:
         prediction = predict_donations(
             dt_model,
@@ -157,10 +180,38 @@ def predict_v2():
             "predicted number of donation bags": prediction
         }
 
+        duration = time.time() - start_time
+        prediction_time.labels(model_version=model_version).observe(duration)
+
         return jsonify(response)
     except Exception as e:
+        prediction_requests.labels(
+            model_version=model_version,
+            status="error"
+        ).inc()
+
         return jsonify({"error": str(e)}), 400
 
+@app.route('/metrics', methods=['GET'])
+def metrics_endpoint():
+    """Expose Prometheus metrics."""
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    return generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
+
+def monitor_resources():
+    """Background thread function to monitor resource usage"""
+    while True:
+        try:
+            # Update memory and CPU metrics
+            process = psutil.Process(os.getpid())
+            memory_usage.set(process.memory_info().rss)  # Resident Set Size in bytes
+            cpu_usage.set(process.cpu_percent(interval=1.0))
+            time.sleep(15)  # Update every 15 seconds
+        except Exception as e:
+            logger.error(f"Error in resource monitoring thread: {e}")
+            time.sleep(60)  # Retry after a minute if there was an error
 
 if __name__ == "__main__":
+    monitor_thread = threading.Thread(target=monitor_resources, daemon=True)
+    monitor_thread.start()
     app.run(host='0.0.0.0', port=6060, debug=True)
